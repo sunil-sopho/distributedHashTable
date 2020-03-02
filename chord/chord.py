@@ -13,7 +13,7 @@ class Chord(object):
 
 	def addNode(self,node):
 		node.join(self.initNode)
-		if sel.finitNode is None:
+		if self.initNode is None:
 			self.initNode = node
 		return 
 
@@ -30,9 +30,15 @@ class fingerRow(object):
 
 def inbetween(c,a,b):
 	if a < b:
-		return a<= c and c<b
-	return a <=c or c<b
+		return a< c and c<=b
+		## @sunil check for a<=c
+	return a <c or c<=b
 
+def inbetween1(c,a,b):
+	if a < b:
+		return a< c and c<=b
+	return a < c and c<=b
+	
 class Node(object):
 
 	def __init__(self,nodeId):
@@ -46,15 +52,16 @@ class Node(object):
 		self.loging = False
 		self.finger = [fingerRow(self.n,i) for i in range(Logsize)]
 		## successor and predecessor vars
-		self.successor = -1
-		self.predecessor = -1
+		self._successor = None
+		self._predecessor = None
 
 
 	def debug(self):
-		for i in range(Logsize):
-			print(i+1," : ",self.finger[i].start," : ",self.finger[i].getnode())
 		print()
-		print(self.n)
+		print(self.n," : ",self._successor.n," : ",self._predecessor.n)
+		for i in range(Logsize):
+			print(i+1," : ",self.finger[i].start," : ",self.finger[i].getnode().n)
+		print()
 	
 
 	def getSuccessor(self):
@@ -64,12 +71,14 @@ class Node(object):
 	def getPredecessor(self):
 		return
 
-	def successor(self,id):
+	def successor(self):
+		return self._successor
 
-		return
+	def predecessor(self):
+		return self._predecessor
 
 	def findSuccessor(self,id):
-		node = findPredecessor(id)
+		node = self.findPredecessor(id)
 		if node is None:
 			print("failed at findSuccessor ")
 			sys.exit(1)
@@ -78,8 +87,19 @@ class Node(object):
 		return	node.successor()
 
 	def findPredecessor(self,id):
+		print("findPredecessor : ",self.n," : ",id)
+		## if alone in ring case
+		if self.successor() == self:
+			return self
+
 		nodeCopy = self
+		# print(nodeCopy.successor)
 		while not inbetween(id,nodeCopy.n,nodeCopy.successor().n):
+			print(nodeCopy.n)
+			print(id," :: ",nodeCopy.n," : ",nodeCopy.successor().n)
+			nodeCopy.debug()
+			nodeCopy.successor().debug()
+
 			nodeCopy = nodeCopy.closestPrecedingFinger(id)
 		if nodeCopy is None:
 			print("failed at findPredecessor ")
@@ -88,8 +108,10 @@ class Node(object):
 
 
 	def closestPrecedingFinger(self,id):
+		print("closestPrecedingFinger :: ",self.n)
 		for i in range(Logsize):
-			if inbetween(self.finger[Logsize-i-1].node,n,id):
+			if inbetween(self.finger[Logsize-i-1].node.n,self.n,id):
+				print("============ ",self.finger[Logsize-i-1].node.n)
 				return self.finger[Logsize-i-1].node
 		print("closestPrecedingFinger return self")
 		return self
@@ -101,31 +123,46 @@ class Node(object):
 		if node is None:
 			for i in range(Logsize):
 				self.finger[i].node = self
+			self._successor = self.finger[0].node
+			self._predecessor = self
 			return
+		else:
+			self.finger[0].node = node.findSuccessor(self.finger[0].start)
+			self._successor = self.finger[0].node
+			self._predecessor = self._successor._predecessor
 
-		self.finger[0].node = node.findSuccessor(finger[0].start)
-		successorNode = finger[0].node
-		predecessorNode = successorNode.predecessor
-
-		successorNode.predecessor = self
-		predecessorNode.successor = self
+			print(self._predecessor.n)
+			print(self._successor.n)
 
 		for i in range(Logsize-1):
-			if inbetween(self.finger[i+1].start,self.n,self.finger[i].node):
+			print(i)
+			print(self.finger[i+1].start," : ",self.n," == ",self.finger[i].node.n)
+			if inbetween(self.finger[i+1].start,self.n,self.finger[i].node.n):
+				print("here ")
 				self.finger[i+1].node = self.finger[i].node
 			else:
-				self.finger[i+1].node = node.findSuccessor(finger[i+1].start)
+				self.finger[i+1].node = node.findSuccessor(self.finger[i+1].start)
 
+		self._successor._predecessor = self
+		self._predecessor._successor = self
 		return
 
 	def updateOthers(self):
+		print("updateOthers")
+
 		for i in range(Logsize):
-			pred = self.findPredecessor(self.n-int(pow(2,i)))
-			pred.updateFingerTable(self,i)
+			pred = self.findPredecessor((self.n-int(pow(2,i))+size)%size)
+			if pred is not self:
+				print("update ,",pred.n," :: ",self.n," :: ",i)
+				pred.updateFingerTable(self,i)
+				pred.debug()
+				self.debug()
+				print("------------------------------------")
 
 		return
 
 	def updateFingerTable(self,node,i):
+		print(node.n," : ",self.n," : ",self.finger[i].node.n,"---",self.predecessor().n)
 		if inbetween(node.n,self.n,self.finger[i].node.n):
 			self.finger[i].node = node 
 			p = self.predecessor()
@@ -157,7 +194,16 @@ if __name__ == "__main__":
 	 # prints all available algorithms 
 	print(size)
 	chord = Chord()
-	for i in range(100):
-		print("inserting node : ",i+1)
+	ar = []
+	for i in range(30):
+		print()
+		print()
+		print()
 		node = Node(i)
+		print("inserting node : ",i+1," : ",node.n)
+
 		chord.addNode(node)
+		ar.append(node)
+
+		for x in ar:
+			x.debug()
