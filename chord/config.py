@@ -1,5 +1,5 @@
 
 
-Logsize = 8
+Logsize = 32
 size = 1  << Logsize
 

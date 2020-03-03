@@ -1,22 +1,37 @@
 import sys
 import hashlib 
 from config import *
-
+import numpy as np
 debugMode = 0
 
 def gethash(strn):
 	strn = str(strn)
-	return hashlib.sha256(strn.encode()).hexdigest()[:Logsize//4] 
+	var = Logsize%4
+	if var >0:
+		var = 1
+	return hashlib.sha256(strn.encode()).hexdigest()[:int(Logsize/4)+var] 
 
 
 class Chord(object):
 	def __init__(self):
 		self.initNode = None
+		self.ar = []
+
+
+	def lookup(self,key):
+		node = self.ar[np.random.randint(0,len(self.ar))]
+		# node = self.initNode
+		return node.get(key,int(gethash(key),16),0)
+	def add(self,key,data):
+		node = self.ar[np.random.randint(0,len(self.ar))]
+		node.put(key,data,int(gethash(key),16))
+
 
 	def addNode(self,node):
 		node.join(self.initNode)
 		if self.initNode is None:
 			self.initNode = node
+		self.ar.append(node)
 		return 
 
 
@@ -35,6 +50,12 @@ def inbetween(c,a,b):
 		return a< c and c<=b
 		## @sunil check for a<=c
 	return a <c or c<=b
+
+def inbetween2(c,a,b):
+	if a < b:
+		return a <= c and c<b
+		## @sunil check for a<=c
+	return a <=c or c<b
 
 def inbetween1(c,a,b):
 	if a < b:
@@ -56,14 +77,16 @@ class Node(object):
 		## successor and predecessor vars
 		self._successor = self
 		self._predecessor = None
+		self._dict = {}
 
 
 	def debug(self):
-		print()
-		print(self.n," : ",self._successor.n," : ",self._predecessor.n)
-		for i in range(Logsize):
-			print(i+1," : ",self.finger[i].start," : ",self.finger[i].getnode().n)
-		print()
+		if debugMode > 2:
+			print()
+			print(self.n," : ",self._successor.n," : ",self._predecessor.n)
+			for i in range(Logsize):
+				print(i+1," : ",self.finger[i].start," : ",self.finger[i].getnode().n)
+			print()
 	
 
 	def getSuccessor(self):
@@ -80,16 +103,23 @@ class Node(object):
 		return self._predecessor
 
 	def closestPrecedingNode(self,id):
-		print("jump here for preceding node:",self.n," : ",id)
+		if debugMode > 3:
+			print("jump here for preceding node:",self.n," : ",id)
 		for i in range(Logsize):
-			# print("check ",self.finger[Logsize-i-1].node.n," : ",self.n," : ",id)
+			if debugMode > 2:
+				print("check ",self.finger[Logsize-i-1].node.n," : ",self.n," : ",id)
 			if inbetween1(self.finger[Logsize-i-1].node.n,self.n,id):
 				# print("hit here : ",self.finger[Logsize-i-1].node.n)
 				return self.finger[Logsize-i-1].node
 		return self
 
 	def findSuccessor(self,id):
+		# if id == self.n:
+		# 	return self
 		if inbetween(id,self.n,self._successor.n):
+			if debugMode > 2:
+				print(id,"=",self.n,"=",self._successor.n)
+				self.debug()
 			return self._successor
 
 		node = self.closestPrecedingNode(id)
@@ -101,20 +131,60 @@ class Node(object):
 
 		return node.findSuccessor(id)
 
+	def findSuccessorGet(self,id):
+		if inbetween(id,self.n,self._successor.n):
+			if debugMode > 2:
+				print(id,"=",self.n,"=",self._successor.n)
+				self.debug()
+			return self._successor
+
+		node = self.closestPrecedingNode(id)
+		if node is None:
+			print("failed at findSuccessor ")
+			sys.exit(1)
+		if node is self:
+			return self	
+
+		return node
+
+	def findSuccessorMode(self,id):
+		if id == self.n:
+			return self
+		if id == self._successor.n:
+			return self._successor
+
+		if inbetween2(id,self.n,self._successor.n):
+			if debugMode > 2:
+				print(id,"=",self.n,"=",self._successor.n)
+				self.debug()
+			return self._successor
+
+		node = self.closestPrecedingNode(id)
+		if node is None:
+			print("failed at findSuccessor ")
+			sys.exit(1)
+		if node is self:
+			return self
+
+		return node.findSuccessor(id)	
+
 
 	def findPredecessor(self,id):
-		print("findPredecessor : ",self.n," : ",id)
+		if debugMode > 3:
+			print("findPredecessor : ",self.n," : ",id)
 		## if alone in ring case
 		if self.successor() == self:
 			return self
 
-		nodeCopy = self.findSuccessor(id)
+		nodeCopy = self.findSuccessorMode(id)
 
 		if nodeCopy is None:
 			print("failed at findPredecessor ")
 			sys.exit(1)	
+		if nodeCopy.n == id:
+			return nodeCopy
 
-
+		# print(nodeCopy._predecessor.n,"==========")
 		return nodeCopy._predecessor
 
 
@@ -138,30 +208,29 @@ class Node(object):
 			self._predecessor = self
 			return
 		else:
-			self.finger[0].node = node.findSuccessor(self.finger[0].start)
-			print("setting succeror :",self.finger[0].node.n," : ",self.finger[0].start)
+			self.finger[0].node = node.findSuccessorMode(self.finger[0].start)
+			# print("setting succeror :",self.finger[0].node.n," : ",self.finger[0].start)
 			self._successor = self.finger[0].node
 			self._predecessor = self._successor._predecessor
 
-			print(self._predecessor.n)
-			print(self._successor.n)
 
 		for i in range(Logsize-1):
-			# print(i)
-			# print(self.finger[i+1].start," : ",self.n," == ",self.finger[i].node.n)
+			if debugMode > 3:
+				print(i)
+				print(self.finger[i+1].start," : ",self.n," == ",self.finger[i].node.n)
 			if inbetween(self.finger[i+1].start,self.n,self.finger[i].node.n):
 				# print("here ")
 				self.finger[i+1].node = self.finger[i].node
 			else:
-				self.finger[i+1].node = node.findSuccessor(self.finger[i+1].start)
+				self.finger[i+1].node = node.findSuccessorMode(self.finger[i+1].start)
 
 		self._successor._predecessor = self
 		self._predecessor._successor = self
 		return
 
 	def updateOthers(self):
-		print("updateOthers")
-
+		# print("updateOthers")
+		self.debug()
 		for i in range(Logsize):
 			pred = self.findPredecessor((self.n-int(pow(2,i))+size)%size)
 			if pred is not self:
@@ -174,9 +243,16 @@ class Node(object):
 		return
 
 	def updateFingerTable(self,node,i):
-		print(node.n," : ",self.n," : ",self.finger[i].node.n,"---",self.predecessor().n)
-		if inbetween(node.n,self.n,self.finger[i].node.n):
-			print("updating:",self.n,":",node.n)
+		if debugMode > 2:
+			print(node.n," : ",self.finger[i].start," : ",self.finger[i].node.n,"---",self.predecessor().n)
+		if self.finger[i].start == self.finger[i].node.n:
+			return
+		if inbetween2(node.n,self.finger[i].start,self.finger[i].node.n):
+			if debugMode > 2:
+				print("updating:",self.n,":",node.n," : ",i+1)
+				self.debug()
+				self._predecessor.debug()
+
 			self.finger[i].node = node 
 			p = self.predecessor()
 			p.updateFingerTable(node,i)
@@ -207,6 +283,47 @@ class Node(object):
 		self.inuse = False
 		return
 
+	def fix_finger(self,node):
+		for i in range(Logsize):
+			self.finger[i].node = node.findSuccessor(self.finger[i].start)
+
+	def get(self,key,hashid,num):
+		# print(num)
+		try : 
+			# print("is here: ",num," : ",self.n," : ",hashid)
+			# print(self._dict)	
+			return self._dict[key],num+1
+		except Exception as e:	
+			# print("is here2: ",num," : ",self.n)
+
+			successor = self.findSuccessorGet(hashid)
+			if successor.n == self.n:
+				"""
+					this node
+				"""
+				return None,num+1
+			else:
+				# num +=1
+				a,b =  successor.get(key,hashid,num+1)
+				return a,b
+		
+
+	def put(self,key,data,hashid):
+		successor = self.findSuccessor(hashid)
+		# if debugMode > 2:
+
+		# print(hashid, " :=: ",self.n," :=: ",successor.n)
+
+		if successor.n == self.n:
+			"""
+				this node
+			"""
+			# print(self.n,": : ",hashid)
+			self.debug()
+			self._dict[key] = data
+		else:
+			successor.put(key,data,hashid)
+		return
 
 
 if __name__ == "__main__":
@@ -216,10 +333,7 @@ if __name__ == "__main__":
 	ar = []
 	st = set()
 	tr = 0
-	for i in range(100):
-		print()
-		print()
-		print()
+	for i in range(10):
 		node = Node(i+tr)
 		while node.n in st:
 			tr +=1
@@ -229,7 +343,51 @@ if __name__ == "__main__":
 
 		chord.addNode(node)
 		ar.append(node)
+		for x in ar:
+			x.debug()
+	# 		if len(ar) > 3:
+	# 			x.fix_finger(ar[np.random.randint(0,len(ar))])
+	# for x in ar:
+	# 		x.stablize()
+	# 		if len(ar) > 3:
+	# 			x.fix_finger(ar[np.random.randint(0,len(ar))])
+	# for x in ar:
+	# 	x.debug()
+	# debugMode = 0
+	# print("max val :,",max(ar))
+	allentry = []
+	allentry2 = []
+	szSet =set()
+	for i in range(10000):
+		var = np.random.randint(0,1000000)
+		while var in szSet:
+			var = np.random.randint(0,1000000)
+		allentry.append(var)
+		allentry2.append(int(gethash(var),16))
+		chord.add(var,var)
 
-		# for x in ar:
-		# 	x.stablize()
-		# 	x.debug()
+	allhops = []
+
+	for i in range(100000):
+		val = allentry[np.random.randint(0,len(allentry))]
+		ans,hop = chord.lookup(val)
+		# print(hop)
+		allhops.append(hop)
+		# print(ans, ":: ",val)
+		if val != ans:
+			print(val,":",ans)
+			sys.exit(-1)
+
+	print(max(allhops)," : ",min(allhops))
+	# print(allhops)
+	print(np.mean(np.array(allhops)))
+
+	# print(allentry2)
+	add=0
+	for x in ar:
+		add+=len(x._dict)
+		# print(x.n," = ",len(x._dict),end=" : ")
+
+	print()
+	print()
+	print(add)
